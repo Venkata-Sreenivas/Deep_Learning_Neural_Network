@@ -155,3 +155,58 @@ def predict_sentiment(text):
 # Test it again!
 predict_sentiment("This was a fantastic and amazing masterpiece")
 predict_sentiment("This was a boring and terrible waste of time")
+
+#LSTM IMBD
+import tensorflow as tf
+from tensorflow.keras.preprocessing.sequence import pad_sequences
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Embedding, LSTM, Dense, Dropout, SpatialDropout1D
+
+MAX_WORDS = 10000
+MAX_LEN = 100
+EMBEDDING_DIM = 128
+BATCH_SIZE = 64
+EPOCHS = 5
+
+(X_train, y_train), (X_test, y_test) = tf.keras.datasets.imdb.load_data(num_words=MAX_WORDS)
+
+X_train = pad_sequences(X_train, maxlen=MAX_LEN)
+X_test = pad_sequences(X_test, maxlen=MAX_LEN)
+
+model = Sequential([
+    Embedding(MAX_WORDS, EMBEDDING_DIM, input_length=MAX_LEN),
+    SpatialDropout1D(0.2),
+    LSTM(64, dropout=0.2, recurrent_dropout=0.2),
+    Dense(64, activation='relu'),
+    Dropout(0.5),
+    Dense(1, activation='sigmoid')
+])
+
+model.compile(
+    loss='binary_crossentropy',
+    optimizer='adam',
+    metrics=['accuracy']
+)
+
+model.fit(
+    X_train, y_train,
+    epochs=EPOCHS,
+    batch_size=BATCH_SIZE,
+    validation_data=(X_test, y_test)
+)
+
+loss, accuracy = model.evaluate(X_test, y_test)
+print(f"Final Test Loss: {loss:.4f}")
+print(f"Final Test Accuracy: {accuracy*100:.4f}%")
+print("\n--- Sample Predictions from Test Set ---")
+predictions = model.predict(X_test[:5]) # Predict the first 5 test reviews
+
+for i in range(5):
+    prob = predictions[i][0]
+    sentiment = "Positive" if prob > 0.5 else "Negative"
+    actual = "Positive" if y_test[i] == 1 else "Negative"
+
+    print(f"Review {i+1}:")
+    print(f"  Predicted: {sentiment} (Probability: {prob:.4f})")
+    print(f"  Actual: {actual}")
+    print("-" * 30)
