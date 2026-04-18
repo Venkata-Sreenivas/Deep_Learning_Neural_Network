@@ -285,3 +285,43 @@ loss, accuracy = model.evaluate(x_test, y_test)
 print(f"Test Loss: {loss:.4f}")
 accuracy*=100
 print(f"Test Accuracy: {accuracy:.4f}%")
+
+import tensorflow as tf
+from tensorflow.keras.datasets import imdb
+from tensorflow.keras.preprocessing.sequence import pad_sequences
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Embedding, LSTM, Dense, Dropout, Input
+
+# 1. Load data
+(x_train, y_train), (x_test, y_test) = imdb.load_data(num_words=10000)
+x_train = pad_sequences(x_train, maxlen=100)
+x_test = pad_sequences(x_test, maxlen=100)
+
+# 2. Define LSTM Model with explicit Input shape
+model = Sequential([
+    # This Input layer tells Keras the shape immediately,
+    # so model.summary() won't show 0 params.
+    Input(shape=(100,)),
+
+    Embedding(input_dim=10000, output_dim=64),
+
+    # LSTM is much better at capturing long-term context than SimpleRNN
+    LSTM(64, return_sequences=True),
+    LSTM(32),
+
+    # Adding Dropout helps prevent the overfitting you saw in your results
+    Dropout(0.5),
+    Dense(1, activation='sigmoid')
+])
+
+# Now this will show ~670,000+ params immediately!
+model.summary()
+
+model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy'])
+
+# 3. Train
+history = model.fit(x_train, y_train, epochs=5, batch_size=64, validation_split=0.2)
+
+# Evaluation
+loss, accuracy = model.evaluate(x_test, y_test)
+print(f"Final Test Accuracy: {accuracy*100:.2f}%")
