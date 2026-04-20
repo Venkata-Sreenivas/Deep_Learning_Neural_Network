@@ -101,3 +101,62 @@ for epoch in range(epochs):
             plt.suptitle(f"Epoch {epoch+1}")
             plt.show()
         generator.train() # Switch back to training mode
+
+
+import torch
+import torch.nn as nn
+from torchvision import datasets, transforms
+from torch.utils.data import DataLoader
+import matplotlib.pyplot as plt
+
+# --- 1. Model Definitions (Condensed) ---
+def block(in_f, out_f, bn=True):
+    return [nn.Linear(in_f, out_f), nn.BatchNorm1d(out_f) if bn else nn.Identity(), nn.LeakyReLU(0.2)]
+
+class GAN(nn.Module):
+    def __init__(self, z_dim):
+        super().__init__()
+        self.gen = nn.Sequential(*block(z_dim, 128, 0), *block(128, 256), *block(256, 512), nn.Linear(512, 784), nn.Tanh())
+        self.disc = nn.Sequential(nn.Flatten(), *block(784, 512, 0), *block(512, 256, 0), nn.Linear(256, 1), nn.Sigmoid())
+
+    def forward(self, z): return self.gen(z).view(-1, 1, 28, 28)
+
+# --- 2. Setup ---
+z_dim, lr, bs, epochs = 100, 2e-4, 128, 50
+dev = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+train_loader = DataLoader(datasets.MNIST('./data', train=True, download=True,
+               transform=transforms.Compose([transforms.ToTensor(), transforms.Normalize([.5], [.5])])), batch_size=bs, shuffle=True)
+
+model = GAN(z_dim).to(dev)
+opt_g = torch.optim.Adam(model.gen.parameters(), lr=lr)
+opt_d = torch.optim.Adam(model.disc.parameters(), lr=lr)
+crit = nn.BCELoss()
+fixed_z = torch.randn(16, z_dim).to(dev)
+
+# --- 3. Training Loop ---
+for epoch in range(epochs):
+    for i, (real, _) in enumerate(train_loader):
+        b_sz = real.size(0)
+        real = real.to(dev)
+        z = torch.randn(b_sz, z_dim).to(dev)
+
+        # Train Discriminator
+        opt_d.zero_grad()
+        fake = model(z)
+        loss_d = (crit(model.disc(real), torch.ones(b_sz, 1).to(dev)) +
+                  crit(model.disc(fake.detach()), torch.zeros(b_sz, 1).to(dev))) / 2
+        loss_d.backward(); opt_d.step()
+
+        # Train Generator
+        opt_g.zero_grad()
+        loss_g = crit(model.disc(fake), torch.ones(b_sz, 1).to(dev))
+        loss_g.backward(); opt_g.step()
+
+    print(f"E {epoch+1} | D: {loss_d.item():.3f} | G: {loss_g.item():.3f}")
+
+    if (epoch + 1) % 10 == 0:
+        imgs = model(fixed_z).detach().cpu()
+        fig, axes = plt.subplots(4, 4, figsize=(4, 4))
+        for j, ax in enumerate(axes.flatten()):
+            ax.imshow((imgs[j][0] + 1) / 2, cmap='gray'); ax.axis('off')
+        plt.show()
